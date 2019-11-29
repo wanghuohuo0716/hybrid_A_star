@@ -5,6 +5,7 @@ function path = FindRSPath(x,y,phi,veh)
     rmin = veh.MIN_CIRCLE; %minimum turning radius
     x = x/rmin;
     y = y/rmin;
+    % 遍历5种方法到达目标点，然后选取路径最短的一条
     [isok1,path1] = CSC(x,y,phi);
     [isok2,path2] = CCC(x,y,phi);
     [isok3,path3] = CCCC(x,y,phi);
@@ -13,6 +14,7 @@ function path = FindRSPath(x,y,phi,veh)
     isoks = [isok1, isok2, isok3, isok4, isok5];
     paths = {path1, path2, path3, path4, path5};
     Lmin = inf;
+    % 找出5条路径最短的曲线
     for i = 1:5
         if isoks(i) == true
             elem = paths{i};
@@ -25,6 +27,7 @@ function path = FindRSPath(x,y,phi,veh)
 %     PlotPath(path,veh);
 end
 
+% 控制角度x取值范围是[-pi,pi]
 function v = mod2pi(x)
     v = rem(x,2*pi);
     if v < -pi
@@ -34,6 +37,7 @@ function v = mod2pi(x)
     end
 end
 
+% formula 8.6
 function [tau,omega] = tauOmega(u,v,xi,eta,phi)
     delta = mod2pi(u-v);
     A = sin(u)-sin(delta);
@@ -50,10 +54,10 @@ end
 
 % formula 8.1
 function [isok,t,u,v] = LpSpLp(x,y,phi)
-    [t,u] = cart2pol(x-sin(phi),y-1+cos(phi));
-    if t >= 0
+    [t,u] = cart2pol(x-sin(phi),y-1+cos(phi)); % 将笛卡尔坐标转换为极坐标,返回theta和rho,论文返回的是[u,t],是因为cart2pol函数返回的值的顺序不同导致与原文不同，变量代表的含义还是一样，t代表弧度，u代表直行的距离
+    if t >= 0 % 必须是左转,t>=0代表左转
         v = mod2pi(phi-t);
-        if v >= 0
+        if v >= 0 % 符号代表前进和后退
             isok = true;
             return
         end
@@ -72,7 +76,7 @@ function [isok,t,u,v] = LpSpRp(x,y,phi)
         theta = atan2(2,u);
         t = mod2pi(t1+theta);
         v = mod2pi(t-phi);
-        if t >= 0 && v >= 0
+        if t >= 0 && v >= 0 % 符号代表前进和后退
             isok = true;
             return
         end
@@ -135,7 +139,7 @@ function [isok,path] = CSC(x,y,phi)
             path = RSPath(RSPath.Types(13,:),-t,-u,-v,0,0);
         end
     end
-    [isok,t,u,v] = LpSpRp(x,-y,-phi); % reflect
+    [isok,t,u,v] = LpSpRp(x,-y,-phi); % reflect 
     if isok
         L = abs(t)+abs(u)+abs(v);
         if Lmin > L
@@ -256,7 +260,7 @@ function [isok,path] = CCC(x,y,phi)
     end
 end
 
-% formula 8.7
+% formula 8.7,tauOmega() is formula 8.6
 function [isok,t,u,v] = LpRupLumRm(x,y,phi)
     xi = x+sin(phi);
     eta = y-1-cos(phi);
@@ -264,7 +268,7 @@ function [isok,t,u,v] = LpRupLumRm(x,y,phi)
     if rho <= 1
         u = acos(rho);
         [t,v] = tauOmega(u,-u,xi,eta,phi);
-        if t >= 0 && v <= 0
+        if t >= 0 && v <= 0 % 符号代表前进和后退
             isok = true;
             return
         end

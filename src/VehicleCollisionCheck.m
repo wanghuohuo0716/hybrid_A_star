@@ -8,26 +8,31 @@ function isCollision = VehicleCollisionCheck(pVec,ObstLine,Vehicle)
     Cornerrr = [-LB, -W/2];
     Pos = pVec(1:2);
     theta = pVec(3);
-    dcm = angle2dcm(-theta, 0, 0);
-    tvec = dcm*[Cornerfl';0];
+    dcm = angle2dcm(-theta, 0, 0); % 方向余弦矩阵，负号是 把坐标转换为基坐标
+    
+    tvec = dcm*[Cornerfl';0]; % 旋转变换
     tvec = tvec';
-    Cornerfl = tvec(1:2)+Pos;
+    Cornerfl = tvec(1:2)+Pos; % 平移变换
+    
     tvec = dcm*[Cornerfr';0];
     tvec = tvec';
     Cornerfr = tvec(1:2)+Pos;
+    
     tvec = dcm*[Cornerrl';0];
     tvec = tvec';
     Cornerrl = tvec(1:2)+Pos;
+    
     tvec = dcm*[Cornerrr';0];
     tvec = tvec';
-    Cornerrr = tvec(1:2)+Pos;    
-    Rect = [];
-    Rect(end+1,:) = [Cornerfl, Cornerfr];
-    Rect(end+1,:) = [Cornerfr, Cornerrr];
-    Rect(end+1,:) = [Cornerrr, Cornerrl];
-    Rect(end+1,:) = [Cornerrl, Cornerfl];
-    isCollision = false;
+    Cornerrr = tvec(1:2)+Pos;   
+    % 记录构成车辆模型的四条直线的起止坐标   
+    Rect = [];                            %  _ _ _ _ _
+    Rect(end+1,:) = [Cornerfl, Cornerfr]; % |    ^    |
+    Rect(end+1,:) = [Cornerfr, Cornerrr]; % |    ^    |
+    Rect(end+1,:) = [Cornerrr, Cornerrl]; % |    ^    |
+    Rect(end+1,:) = [Cornerrl, Cornerfl]; % | _ _^ _ _|
     obs_self_define=[-25, 30; 25, 30; 25, 5; 10, 5; 10, 0; -10, 0; -10, 5; -25, 5; -25, 30]; % 手动根据地图修改障碍物线段,地图变换时需要修改此数据
+    isCollision = false;
     for i = 1:length(ObstLine)
         [xi,yi] = polyxpoly([Rect(:,1);Rect(1,1)],[Rect(:,2);Rect(1,2)],obs_self_define(:,1),obs_self_define(:,2)); % 检测车身是否与边界相交
         if isempty(xi)==0

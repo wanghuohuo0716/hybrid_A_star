@@ -12,7 +12,7 @@ classdef Node
         cost = inf;
     end
     methods
-        function obj = Node(xidx,yidx,yawidx,D,delta,x,y,theta,parent,cost)
+        function obj = Node(xidx,yidx,yawidx,D,delta,x,y,theta,parent,cost) % 构造函数，声明的时候就定义了
             obj.xidx = xidx;
             obj.yidx = yidx;
             obj.yawidx = yawidx;

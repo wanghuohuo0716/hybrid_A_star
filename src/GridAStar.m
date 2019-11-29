@@ -33,10 +33,10 @@ function cost = AStarSearch(start,goal,obmap)
     Grids = zeros(dim(1),dim(2),4);
     for i = 1:dim(1)
         for j = 1:dim(2)
-            Grids(i,j,1) = i;
-            Grids(i,j,2) = j;
-            Grids(i,j,3) = norm(([i,j]-goal));
-            Grids(i,j,4) = inf;
+            Grids(i,j,1) = i; % 父节点的所在行
+            Grids(i,j,2) = j; % 父节点的所在列
+            Grids(i,j,3) = norm(([i,j]-goal)); % 启发值h
+            Grids(i,j,4) = inf; % g值
         end
     end
     Open = [start];

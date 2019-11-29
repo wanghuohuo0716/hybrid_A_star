@@ -22,8 +22,8 @@ classdef RSPath
             ];
     end
     properties
-        type = repmat('N',[1,5]);
-        t = 0;
+        type = repmat('N',[1,5]); % 重复数组副本，即['N','N','N','N','N']
+        t = 0; %以下5个变量分别代表type中对应操作方式的路径距离
         u = 0;
         v = 0;
         w = 0;
@@ -31,7 +31,7 @@ classdef RSPath
         totalLength = 0;
     end
     methods
-        function obj = RSPath(type,t,u,v,w,x)
+        function obj = RSPath(type,t,u,v,w,x) % 构造函数
             obj.type = type;
             obj.t = t;
             obj.u = u;

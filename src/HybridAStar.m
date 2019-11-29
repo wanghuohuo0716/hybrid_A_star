@@ -2,12 +2,13 @@ function [x,y,th,D,delta] = HybridAStar(Start,End,Vehicle,Configure)
     veh = Vehicle;
     cfg = Configure;
     mres = cfg.MOTION_RESOLUTION; % motino resolution 
-    % use grid a star search result as heuristic cost
+    
+    % 把起始的位姿(x,y,theta)转换为grid上的栅格索引
     [isok,xidx,yidx,thidx] = CalcIdx(Start(1),Start(2),Start(3),cfg);
-    if isok
+    if isok % 把位姿栅格定义为一个结点，形成链表结构
         tnode = Node(xidx,yidx,thidx,mres,0,Start(1),Start(2),Start(3),[xidx,yidx,thidx],0);
     end
-    Open = [tnode];
+    Open = [tnode]; % hybrid A*的Open集合
     Close = [];
 %     [isok,xidx,yidx,thidx] = CalcIdx(End(1),End(2),End(3),cfg);
 %     if isok
@@ -22,33 +23,38 @@ function [x,y,th,D,delta] = HybridAStar(Start,End,Vehicle,Configure)
         % pop the least cost node from open to close
         [wknode,Open] = PopNode(Open,cfg);
         [isok,idx] = inNodes(wknode,Close);
+        
+        % 判断是否在Close集合内
         if isok
             Close(idx) = wknode;
         else
             Close = [Close, wknode];
         end
+
+        % 以wknode为根节点生成搜索树，使用Reeds-Shepp方法基于车辆单轨模型进行运动学解析拓展子结点
         [isok,path] = AnalysticExpantion([wknode.x,wknode.y,wknode.theta],End,veh,cfg);
         if  isok
-            %put wknode to the end of close
+            %把wknode从idx移到Close集合最后面
             Close(end+1) = wknode;
             Close(idx) = [];
             [x,y,th,D,delta] = getFinalPath(path,Close,veh,cfg);
-            break
+            break % 如果能直接得到RS曲线，则跳出while循环
         end
-        [Open,Close] = Update(wknode,Open,Close,veh,cfg);
-    end   
+        [Open,Close] = Update(wknode,Open,Close,veh,cfg); % 使用
+    end
 %     [isok,path] = AnalysticExpantion(Start,End,Vehicle,Configure);
 end
 
 function [x,y,th,D,delta] = getFinalPath(path,Close,veh,cfg)
-    wknode = Close(end);
+    wknode = Close(end); % 最后一个元素通常是目标点
     Close(end) = [];
     nodes = [wknode];
+    % 找目标点的parent,回溯，知道Close集合为空
     while ~isempty(Close)
         n = length(Close);
         parent = wknode.parent;
         for i = n:-1:1
-            flag = 0;
+            flag = 0; % 只有赋值，没有使用
             tnode = Close(i);
             if tnode.xidx == parent(1)...
                     && tnode.yidx == parent(2)...
@@ -66,7 +72,7 @@ function [x,y,th,D,delta] = getFinalPath(path,Close,veh,cfg)
     mres = cfg.MOTION_RESOLUTION;
     gres = cfg.XY_GRID_RESOLUTION;
     % decrease one step, caz node origin is consider in
-    nlist = floor(gres*1.5/cfg.MOTION_RESOLUTION)+1;
+    nlist = floor(gres*1.5/cfg.MOTION_RESOLUTION)+1; % 朝负无穷大四舍五入
     x = [];
     y = [];
     th = [];
@@ -155,20 +161,20 @@ end
 
 function [Open,Close] = Update(wknode,Open,Close,veh,cfg)
     mres = cfg.MOTION_RESOLUTION; % motino resolution    
-    smax = veh.MAX_STEER; % maximum steering angle
-    sres = smax/cfg.N_STEER; % steering resolution  
+    smax = veh.MAX_STEER; % 0.6[rad],maximum steering angle
+    sres = smax/cfg.N_STEER; % 20,steering resolution  
     % all possible control input
-    for D = [-mres,mres]
-        for delta = [-smax:sres:-sres,0,sres:sres:smax]
-            [isok,tnode] = CalcNextNode(wknode,D,delta,veh,cfg);
-            if isok == false
+    for D = [-mres,mres] % D是0.1m,正负代表前进或后退,车辆当前位置的后轴中心与下一个位置的后轴中心之间的直线距离，有2个子结点
+        for delta = [-smax:sres:-sres,0,sres:sres:smax] % delta是转向角，分辨率是0.03[rad]，[-0.6,0.6],有21个子结点(包含0[rads])
+            [isok,tnode] = CalcNextNode(wknode,D,delta,veh,cfg); % 计算wknode的所有子结点，一共2*21=42个
+            if isok == false % 子结点不可行
                 continue
             end
-            % if already in close, skip it
-            [isok,~] = inNodes(tnode,Close);
+            [isok,~] = inNodes(tnode,Close);% 在Close集合中
             if isok
                 continue
             end 
+            % 拓展的节点如果在Open中比较f值;若不在则添加到Open中
             [isok,idx] = inNodes(tnode,Open);
             if isok
                 % in same grid but have different cost
@@ -286,14 +292,16 @@ end
 function [isok,path] = AnalysticExpantion(Start,End,Vehicle,Configure)
     isok = true;
     isCollision = false;
+    
+    % 将起点转换到原点计算轨迹，变换坐标系了
     pvec = End-Start;
     x = pvec(1);
     y = pvec(2);
     phi = Start(3);
     phi = mod2pi(phi);
-    dcm = angle2dcm(phi, 0, 0);
+    dcm = angle2dcm(phi, 0, 0); % 起点start坐标系在基坐标系下的方向余弦矩阵
     % dcm*x 表示将基坐标中的x表示到旋转后的坐标系中，即计算坐标旋转后各向量在新坐标中的表示
-    tvec = dcm*[x; y ; 0];
+    tvec = dcm * [x; y ; 0]; % 计算坐标旋转后各向量在起点start坐标中的表示
     x = tvec(1);
     y = tvec(2);
     veh = Vehicle;
@@ -302,7 +310,11 @@ function [isok,path] = AnalysticExpantion(Start,End,Vehicle,Configure)
     smax = veh.MAX_STEER;
     mres = cfg.MOTION_RESOLUTION;
     obstline = cfg.ObstLine;
+    
+    % 看是否从当前点到目标点存在无碰撞的Reeds-Shepp轨迹，前面pvec=End-Start;的意义就在这里，注意！这里的x,y,prev(3)是把起点转换成以start为原点坐标系下的坐标
     path = FindRSPath(x,y,pvec(3),veh);
+
+    % 以下是根据路径点和车辆运动学模型计算位置，检测是否会产生碰撞，返回isok的值。对每段路径从起点到终点按顺序进行处理，这一个线段的终点pvec是下一个线段的起点px,py,pth，  
     types = path.type;
     t = rmin*path.t;
     u = rmin*path.u;
@@ -312,15 +324,17 @@ function [isok,path] = AnalysticExpantion(Start,End,Vehicle,Configure)
     segs = [t,u,v,w,x];
     pvec = Start;
     for i = 1:5
-        if segs(i) == 0
+        if segs(i) ==0
             continue
         end
         px =pvec(1);
         py = pvec(2);
         pth = pvec(3);
-        s = sign(segs(i));
-        D = s*mres;
-        if types(i) == 'S'          
+        s = sign(segs(i)); % 符号函数,判断此段运动方向是前进还是后退
+        
+        % 根据车辆的2*3种运动类型(前后2种，转向3种)，设置D和delta
+        D = s*mres; % 分辨率的正负
+        if types(i) == 'S'
             delta = 0;
         elseif types(i) == 'L'
             delta = smax;
@@ -329,40 +343,46 @@ function [isok,path] = AnalysticExpantion(Start,End,Vehicle,Configure)
         else
             % do nothing
         end
-        for idx = 1:round(abs(segs(i))/mres)                
+        
+        % 把此段的路径离散成为路点，即栅格索引,然后为路点，然后检测是否存在障碍物碰撞问题
+        for idx = 1:round(abs(segs(i))/mres) % round()四舍五入
+            % D和delta是固定，说明转弯的时候是按固定半径的圆转弯
            	[px,py,pth] = VehicleDynamic(px,py,pth,D,delta,veh.WB);
-            if rem(idx,5) == 0
+            if rem(idx,5) == 0 % rem(a,b)，返回用 a/b后的余数，每5个点，即0.5m检查下是否碰撞
                 tvec = [px,py,pth];
                 isCollision = VehicleCollisionCheck(tvec,obstline,veh);
                 if isCollision
                     break
                 end
             end
-        end
+         end
         if isCollision
             isok = false;
-            break
+            break % 如果路径存在碰撞则舍弃此条Reeds-Shepp路径
         end
         pvec = [px,py,pth];
     end
+    % 终点位姿小于期望阈值也舍弃
     if (mod2pi(pth) - End(3)) > deg2rad(5)
         isok = false;
     end
 end
 
+% 根据当前位姿和输入,计算下一位置的位姿
 function [x,y,theta] = VehicleDynamic(x,y,theta,D,delta,L)
-    x = x+D*cos(theta);
-    y = y+D*sin(theta);
-    theta = theta+D/L*tan(delta);
+    x = x+D*cos(theta); % 运动学公式： x_dot = v_x * cos(theta); x_dot * t = v_x * t * cos(theta),在采样时间t内,则有x = x + v_x * t * cos(theta)，其中v_x * t=D
+    y = y+D*sin(theta); % 运动学公式
+    theta = theta+D/L*tan(delta); % L是轴距,航向变化,theta_dot=v/R,R=L/tan(delta)
     theta = mod2pi(theta);
 end
 
+% 把位姿(x,y,theta)转换为grid上的栅格索引,如果不符合实际则isok=false
 function [isok,xidx,yidx,thidx] = CalcIdx(x,y,theta,cfg)
     gres = cfg.XY_GRID_RESOLUTION;
     yawres = cfg.YAW_GRID_RESOLUTION;
     xidx = ceil((x-cfg.MINX)/gres);
     yidx = ceil((y-cfg.MINY)/gres);
-    theta = mod2pi(theta);
+    theta = mod2pi(theta); % 控制theta范围在[-pi,pi]区间
     thidx = ceil((theta-cfg.MINYAW)/yawres);
     isok = true;
     if xidx <=0 || xidx > ceil((cfg.MAXX-cfg.MINX)/gres)
@@ -378,8 +398,9 @@ function [isok,xidx,yidx,thidx] = CalcIdx(x,y,theta,cfg)
     end
 end
 
+% 把弧度x控制在[-pi,pi]
 function v = mod2pi(x)
-    v = rem(x,2*pi);
+    v = rem(x,2*pi); % 求整除x/2pi的余数
     if v < -pi
         v = v+2*pi;
     elseif v > pi
