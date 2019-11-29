@@ -68,7 +68,7 @@ Configure.STEER_COST = 1.5; % steer angle change penalty cost
 Configure.H_COST = 10; % Heuristic cost
 
 % Start = [-15, 10, 0];
-% End = [-4, 3, pi];
+% End = [-4, 10, 0];
 
 Start = [22, 13, pi];
 End = [7, 2, pi/2];

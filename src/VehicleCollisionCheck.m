@@ -27,8 +27,12 @@ function isCollision = VehicleCollisionCheck(pVec,ObstLine,Vehicle)
     Rect(end+1,:) = [Cornerrr, Cornerrl];
     Rect(end+1,:) = [Cornerrl, Cornerfl];
     isCollision = false;
+    obs_self_define=[-25, 30; 25, 30; 25, 5; 10, 5; 10, 0; -10, 0; -10, 5; -25, 5; -25, 30]; % 手动根据地图修改障碍物线段,地图变换时需要修改此数据
     for i = 1:length(ObstLine)
-        isCollision = RectLineCollisionCheck(Rect, ObstLine(i,:));
+        [xi,yi] = polyxpoly([Rect(:,1);Rect(1,1)],[Rect(:,2);Rect(1,2)],obs_self_define(:,1),obs_self_define(:,2)); % 检测车身是否与边界相交
+        if isempty(xi)==0
+            isCollision = true;
+        end
         if isCollision == true
             return
         end
