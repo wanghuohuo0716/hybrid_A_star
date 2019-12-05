@@ -46,13 +46,14 @@ function [x,y,th,D,delta] = HybridAStar(Start,End,Vehicle,Configure)
 end
 
 function [x,y,th,D,delta] = getFinalPath(path,Close,veh,cfg)
-    wknode = Close(end); % 最后一个元素通常是目标点
+    wknode = Close(end); % RS曲线中最后一个元素是目标点
     Close(end) = [];
     nodes = [wknode];
-    % 找目标点的parent,回溯，知道Close集合为空
+    % 找目标点wknode的parent,回溯，直到Close集合为空
     while ~isempty(Close)
         n = length(Close);
         parent = wknode.parent;
+        % 计算从目标返回到起始点的路径点序列，放入nodes中
         for i = n:-1:1
             flag = 0; % 只有赋值，没有使用
             tnode = Close(i);
@@ -72,18 +73,19 @@ function [x,y,th,D,delta] = getFinalPath(path,Close,veh,cfg)
     mres = cfg.MOTION_RESOLUTION;
     gres = cfg.XY_GRID_RESOLUTION;
     % decrease one step, caz node origin is consider in
-    nlist = floor(gres*1.5/cfg.MOTION_RESOLUTION)+1; % 朝负无穷大四舍五入
+    nlist = floor(gres*1.5/cfg.MOTION_RESOLUTION)+1; % 固定值31，和栅格的索引是选取线的交点还是选取栅格中心有关，floor是朝负无穷大四舍五入     % 每条轨迹大概是2米的长度。这里乘以1.5是确保下一个末端状态肯定在另一个栅格中，不会还在一个栅格中！在地图栅格中子结点拓展。比如对角线长度是1.4，此时还是在同一个栅格中
     x = [];
     y = [];
     th = [];
     D = [];
     delta = [];
     flag = 0;
+    % 路径要么是纯RS路径，要么是由RS路径和混合A*组合一起来的路径，先处理混合A*的结点，最后处理RS路径，肯定有RS路径
     if length(nodes) >= 2
-        % caz first node is start point, we ignore this node
+        % 不是纯的RS路径，而是由RS路径和混合A*组合一起来的路径，>=2这些节点都是混合A*搜出来的
         for i = length(nodes):-1:2
             tnode = nodes(i);
-            ttnode = nodes(i-1);
+            ttnode = nodes(i-1); % parent of i
             % initial point
             px = tnode.x;
             py = tnode.y;
@@ -101,7 +103,7 @@ function [x,y,th,D,delta] = getFinalPath(path,Close,veh,cfg)
                 D = [D, ttnode.D];
                 delta = [delta, ttnode.delta];
             end
-            % delete last point
+            % 删除点，为RS路径做准备
             if i ~= 2
                 x(end) = [];
                 y(end) = [];
@@ -111,7 +113,7 @@ function [x,y,th,D,delta] = getFinalPath(path,Close,veh,cfg)
             end
         end
     else
-        % if just rs path so we will get path without node
+        % 最后一个结点是纯的RS路径终点
         flag = 1;
         tnode = nodes(1);
         px = tnode.x;
@@ -121,6 +123,7 @@ function [x,y,th,D,delta] = getFinalPath(path,Close,veh,cfg)
         y = [y, py];
         th = [th, pth];
     end
+    % 此时已经搜完了全部路径，最后肯定有一段是RS路径
     types = path.type;
     t = rmin*path.t;
     u = rmin*path.u;
@@ -131,7 +134,7 @@ function [x,y,th,D,delta] = getFinalPath(path,Close,veh,cfg)
         if segs(i) == 0
             continue
         end
-        s = sign(segs(i));
+        s = sign(segs(i)); % 前进或后退
         
         if types(i) == 'S'          
             tdelta = 0;
@@ -148,8 +151,9 @@ function [x,y,th,D,delta] = getFinalPath(path,Close,veh,cfg)
             delta = [delta, tdelta];
             flag = 0;
         end
-        for idx = 1:round(abs(segs(i))/mres)                
-           	[px,py,pth] = VehicleDynamic(px,py,pth,s*mres,tdelta,veh.WB);
+        % 根据RS曲线路径的输入，基于运动学公式计算RS曲线上每个路径点的状态x,y,th
+        for idx = 1:round(abs(segs(i))/mres) % 四舍五入为最近的小数或整数
+           	[px,py,pth] = VehicleDynamic(px,py,pth,s*mres,tdelta,veh.WB); % s*mres中s代表前进和后退
             x = [x, px];
             y = [y, py];
             th = [th, pth];
@@ -163,10 +167,10 @@ function [Open,Close] = Update(wknode,Open,Close,veh,cfg)
     mres = cfg.MOTION_RESOLUTION; % motino resolution    
     smax = veh.MAX_STEER; % 0.6[rad],maximum steering angle
     sres = smax/cfg.N_STEER; % 20,steering resolution  
-    % all possible control input
+    % all possible control input，
     for D = [-mres,mres] % D是0.1m,正负代表前进或后退,车辆当前位置的后轴中心与下一个位置的后轴中心之间的直线距离，有2个子结点
         for delta = [-smax:sres:-sres,0,sres:sres:smax] % delta是转向角，分辨率是0.03[rad]，[-0.6,0.6],有21个子结点(包含0[rads])
-            [isok,tnode] = CalcNextNode(wknode,D,delta,veh,cfg); % 计算wknode的所有子结点，一共2*21=42个
+            [isok,tnode] = CalcNextNode(wknode,D,delta,veh,cfg); % 计算wknode的所有子结点，一共2*21=42个，此函数是根据固定的D和delta计算wknode沿着一条路径的所有子结点，tnode是此条路径的末端点
             if isok == false % 子结点不可行
                 continue
             end
@@ -177,7 +181,7 @@ function [Open,Close] = Update(wknode,Open,Close,veh,cfg)
             % 拓展的节点如果在Open中比较f值;若不在则添加到Open中
             [isok,idx] = inNodes(tnode,Open);
             if isok
-                % in same grid but have different cost
+                % 与之前的cost比较，进行更新
                 tcost = TotalCost(tnode,cfg);
                 ttnode = Open(idx);
                 ttcost = TotalCost(ttnode,cfg);
@@ -206,25 +210,27 @@ function [isok,idx] = inNodes(node,nodes)
     isok = false;
 end
 
+% 根据D和delta计算wknode沿着一条路径的所有子结点
 function [isok,tnode] = CalcNextNode(wknode,D,delta,veh,cfg)
     px = wknode.x;
     py = wknode.y;
     pth = wknode.theta;
     gres = cfg.XY_GRID_RESOLUTION;
     obstline = cfg.ObstLine;
-    nlist = floor(gres*1.5/cfg.MOTION_RESOLUTION)+1;
+    % 每条轨迹大概是2米的长度。这里乘以1.5是确保下一个末端状态肯定在另一个栅格中，不会还在一个栅格中！在地图栅格中子结点拓展。比如对角线长度是1.4，此时还是在同一个栅格中
+    nlist = floor(gres*1.5/cfg.MOTION_RESOLUTION)+1; %此处是定值31， 计算给定D和delta下，沿着一条路径上wknode的子结点的数目，以便填充数据     % 每条轨迹大概是2米的长度。这里乘以1.5是确保下一个末端状态肯定在另一个栅格中，不会还在一个栅格中！在地图栅格中子结点拓展。比如对角线长度是1.4，此时还是在同一个栅格中
     x = zeros(1,nlist+1);
     y = x;
     th = x;
     x(1) = px;
     y(1) = py;
     th(1) = pth;
-    for idx = 1:nlist
+    for idx = 1:nlist % 根据当前的状态和给定的控制，计算此条路径上的连着的车辆状态，根据上一时刻计算下一时刻
         [px,py,pth] = VehicleDynamic(px,py,pth,D,delta,veh.WB);
-        x(idx+1) = px;
+        x(idx+1) = px; % x,y,th储存了数据，但是没用到变量
         y(idx+1) = py;
         th(idx+1) = pth;
-        if rem(idx,5) == 0
+        if rem(idx,5) == 0 % 每隔5个点进行一次碰撞检测
             tvec = [px,py,pth];
             isCollision = VehicleCollisionCheck(tvec,obstline,veh);
             if isCollision
@@ -238,14 +244,14 @@ function [isok,tnode] = CalcNextNode(wknode,D,delta,veh,cfg)
         return
     else
 %         plot(x,y);
-        [isok,xidx,yidx,thidx] = CalcIdx(px,py,pth,cfg);
+        [isok,xidx,yidx,thidx] = CalcIdx(px,py,pth,cfg); % 把路径末端点的实际坐标转换为栅格坐标
         if isok == false
             return
         else
             cost = wknode.cost;
-            if D > 0
-                cost = cost + gres*1.5;
-            else
+            if D > 0 % 前进
+                cost = cost + gres*1.5; % 每条轨迹大概是2米的长度。这里乘以1.5是确保下一个末端状态肯定在另一个栅格中，不会还在一个栅格中！在地图栅格中子结点拓展。比如对角线长度是1.4，此时还是在同一个栅格中
+            else % 后退
                 cost = cost + cfg.BACK_COST*gres*1.5;
             end
             if D ~= wknode.D
@@ -254,7 +260,7 @@ function [isok,tnode] = CalcNextNode(wknode,D,delta,veh,cfg)
             cost = cost + cfg.STEER_COST*abs(delta);
             cost = cost + cfg.STEER_CHANGE_COST*abs(delta-wknode.delta);
             tnode = Node(xidx,yidx,thidx,D,delta,px,py,pth,...
-                [wknode.xidx,wknode.yidx,wknode.yawidx],cost);
+                [wknode.xidx,wknode.yidx,wknode.yawidx],cost); % tnode是路径的末端点，cost为到当前状态到此路径末端状态的成本
         end         
     end
 end
@@ -279,13 +285,13 @@ end
 function cost = TotalCost(wknode,cfg)
     gres = cfg.XY_GRID_RESOLUTION;
     costmap = cfg.ObstMap;
-    % from grid center to goal
-    cost = cfg.H_COST*costmap(wknode.yidx,wknode.xidx);
-    % from node position to grid center
-    xshift = wknode.x - (gres*(wknode.xidx-0.5)+cfg.MINX);
+    % 从栅格中心到目标
+    cost = cfg.H_COST*costmap(wknode.yidx,wknode.xidx); % 无障碍碰撞地图上的成本，用A*搜出来的，二维地图，没用航向
+    % 从当前结点到栅格中心
+    xshift = wknode.x - (gres*(wknode.xidx-0.5)+cfg.MINX); % 栅格的index是线的交点，而不是栅格的中心,在求坐标时所以会有减0.5
     yshift = wknode.y - (gres*(wknode.yidx-0.5)+cfg.MINY);
     cost = cost+cfg.H_COST*norm([xshift,yshift]);
-    % f = h + g
+    % f = g + h
     cost = wknode.cost + cost;
 end
 
