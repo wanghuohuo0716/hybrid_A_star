@@ -12,4 +12,4 @@
 ## 文件组织
 ![](https://github.com/wanghuohuo0716/hybrid_A_star/blob/master/image/Mind.png)
 
-## 感谢[柳梦璃](https://zhuanlan.zhihu.com/p/40776683)为本仓库开源的源代码！
+## 代码解释可以参考[这里](https://zhuanlan.zhihu.com/p/40776683)！
