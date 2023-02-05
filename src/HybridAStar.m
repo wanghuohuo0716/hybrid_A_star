@@ -22,21 +22,24 @@ function [x,y,th,D,delta] = HybridAStar(Start,End,Vehicle,Configure)
     while ~isempty(Open)
         % pop the least cost node from open to close
         [wknode,Open] = PopNode(Open,cfg);
-        [isok,idx] = inNodes(wknode,Close);
+        [isok1,idx] = inNodes(wknode,Close);
         
         % 判断是否在Close集合内
-        if isok
+        if isok1
             Close(idx) = wknode;
         else
             Close = [Close, wknode];
         end
 
         % 以wknode为根节点生成搜索树，使用Reeds-Shepp方法基于车辆单轨模型进行运动学解析拓展子结点
-        [isok,path] = AnalysticExpantion([wknode.x,wknode.y,wknode.theta],End,veh,cfg);
-        if  isok
+        [isok2,path] = AnalysticExpantion([wknode.x,wknode.y,wknode.theta],End,veh,cfg);
+        if  isok2
             %把wknode从idx移到Close集合最后面
-            Close(end+1) = wknode;
-            Close(idx) = [];
+            if isok1
+                Close(end+1) = wknode;
+                Close(idx) = [];
+            else
+            end
             [x,y,th,D,delta] = getFinalPath(path,Close,veh,cfg);
             break % 如果能直接得到RS曲线，则跳出while循环
         end
@@ -318,7 +321,7 @@ function [isok,path] = AnalysticExpantion(Start,End,Vehicle,Configure)
     obstline = cfg.ObstLine;
     
     % 看是否从当前点到目标点存在无碰撞的Reeds-Shepp轨迹，前面pvec=End-Start;的意义就在这里，注意！这里的x,y,prev(3)是把起点转换成以start为原点坐标系下的坐标
-    path = FindRSPath(x,y,pvec(3),veh);
+    path = FindRSPath_plus(x,y,pvec(3),veh);
 
     % 以下是根据路径点和车辆运动学模型计算位置，检测是否会产生碰撞，返回isok的值。对每段路径从起点到终点按顺序进行处理，这一个线段的终点pvec是下一个线段的起点px,py,pth，  
     types = path.type;
