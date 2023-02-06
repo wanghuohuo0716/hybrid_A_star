@@ -22,21 +22,24 @@ function [x,y,th,D,delta] = HybridAStar(Start,End,Vehicle,Configure)
     while ~isempty(Open)
         % pop the least cost node from open to close
         [wknode,Open] = PopNode(Open,cfg);
-        [isok,idx] = inNodes(wknode,Close);
+        [isok1,idx] = inNodes(wknode,Close);
         
         % 判断是否在Close集合内
-        if isok
+        if isok1
             Close(idx) = wknode;
         else
             Close = [Close, wknode];
         end
 
         % 以wknode为根节点生成搜索树，使用Reeds-Shepp方法基于车辆单轨模型进行运动学解析拓展子结点
-        [isok,path] = AnalysticExpantion([wknode.x,wknode.y,wknode.theta],End,veh,cfg);
-        if  isok
+        [isok2,path] = AnalysticExpantion([wknode.x,wknode.y,wknode.theta],End,veh,cfg);
+        if  isok2
             %把wknode从idx移到Close集合最后面
-            Close(end+1) = wknode;
-            Close(idx) = [];
+            if isok1
+                Close(end+1) = wknode;
+                Close(idx) = [];
+            else
+            end
             [x,y,th,D,delta] = getFinalPath(path,Close,veh,cfg);
             break % 如果能直接得到RS曲线，则跳出while循环
         end
